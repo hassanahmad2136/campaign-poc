@@ -40,4 +40,4 @@ This project demonstrates a proof of concept for integrating **Zoho CRM**, **Rin
 1. Clone the repository:
    ```bash
    git clone https://github.com/hassanahmad2136/zoho-ringcentral-authorize-net-integration.git
-   cd zoho-ringcentral-authorize-net-integration
+   python zoho_call_integration.py
