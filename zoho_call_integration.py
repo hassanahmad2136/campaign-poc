@@ -7,7 +7,7 @@ from decimal import Decimal
 from authorizenet import apicontractsv1
 from authorizenet.apicontrollers import *
 
-# Load constants for API credentials
+
 constants = SourceFileLoader('modulename', 'constants.py').load_module()
 
 # Zoho CRM OAuth2 Access Token
@@ -86,11 +86,10 @@ call_details = {
 contact_id = "1234567890"  # Replace with actual Zoho contact ID
 transaction_id = "TRANSACTION_ID"  # Replace with actual transaction ID from Authorize.net
 
-# Step 1: Retrieve payment details from Authorize.net
+
 transaction_info = get_transaction_details(transaction_id)
 if transaction_info:
     print("Transaction Details:", transaction_info)
-    # Step 2: Log the call in Zoho CRM
     response_call = log_call_in_zoho(contact_id, call_details)
     print("Call Response:", response_call)
 else:
