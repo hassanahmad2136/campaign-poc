@@ -1,4 +1,14 @@
+import os
+import sys
 import requests
+from importlib.machinery import SourceFileLoader
+from decimal import Decimal
+
+from authorizenet import apicontractsv1
+from authorizenet.apicontrollers import *
+
+# Load constants for API credentials
+constants = SourceFileLoader('modulename', 'constants.py').load_module()
 
 # Zoho CRM OAuth2 Access Token
 zoho_access_token = "YOUR_ZOHO_ACCESS_TOKEN"
@@ -6,9 +16,44 @@ zoho_access_token = "YOUR_ZOHO_ACCESS_TOKEN"
 # RingCentral API Key
 ringcentral_api_key = "YOUR_RINGCENTRAL_API_KEY"
 
-# Authorize.net API Credentials
-authorize_net_api_login_id = "YOUR_AUTH_NET_API_LOGIN_ID"
-authorize_net_transaction_key = "YOUR_AUTH_NET_TRANSACTION_KEY"
+# Function to retrieve payment details from Authorize.net
+def get_transaction_details(transId):
+    merchantAuth = apicontractsv1.merchantAuthenticationType()
+    merchantAuth.name = constants.apiLoginId
+    merchantAuth.transactionKey = constants.transactionKey
+
+    transactionDetailsRequest = apicontractsv1.getTransactionDetailsRequest()
+    transactionDetailsRequest.merchantAuthentication = merchantAuth
+    transactionDetailsRequest.transId = transId
+
+    transactionDetailsController = getTransactionDetailsController(transactionDetailsRequest)
+    transactionDetailsController.execute()
+    
+    transactionDetailsResponse = transactionDetailsController.getresponse()
+
+    if transactionDetailsResponse is not None:
+        if transactionDetailsResponse.messages.resultCode == apicontractsv1.messageTypeEnum.Ok:
+            print('Successfully got transaction details!')
+            # Extract details
+            transaction_info = {
+                'transaction_id': transactionDetailsResponse.transaction.transId,
+                'transaction_type': transactionDetailsResponse.transaction.transactionType,
+                'transaction_status': transactionDetailsResponse.transaction.transactionStatus,
+                'auth_amount': Decimal(transactionDetailsResponse.transaction.authAmount),
+                'settle_amount': Decimal(transactionDetailsResponse.transaction.settleAmount),
+            }
+            if hasattr(transactionDetailsResponse.transaction, 'tax'):
+                transaction_info['tax'] = Decimal(transactionDetailsResponse.transaction.tax.amount)
+            if hasattr(transactionDetailsResponse.transaction, 'profile'):
+                transaction_info['customer_profile_id'] = transactionDetailsResponse.transaction.profile.customerProfileId
+            return transaction_info
+        else:
+            if transactionDetailsResponse.messages is not None:
+                print('Failed to get transaction details.\nCode:%s \nText:%s' % (
+                    transactionDetailsResponse.messages.message[0]['code'].text,
+                    transactionDetailsResponse.messages.message[0]['text'].text
+                ))
+    return None
 
 # Function to log a call in Zoho CRM
 def log_call_in_zoho(contact_id, call_details):
@@ -31,41 +76,22 @@ def log_call_in_zoho(contact_id, call_details):
     response = requests.post(url, json=payload, headers=headers)
     return response.json()
 
-# Function to retrieve payment information from Authorize.net
-def get_payment_details(transaction_id):
-    url = "https://api.authorize.net/xml/v1/request.api"
-    headers = {
-        "Content-Type": "application/xml",
-    }
-    xml_payload = f"""
-    <?xml version="1.0" encoding="utf-8"?>
-    <createTransactionRequest xmlns="AnetApi/xml/v1/schema/AnetApiSchema.xsd">
-        <merchantAuthentication>
-            <name>{authorize_net_api_login_id}</name>
-            <transactionKey>{authorize_net_transaction_key}</transactionKey>
-        </merchantAuthentication>
-        <transactionRequest>
-            <transactionType>json</transactionType>
-            <refTransId>{transaction_id}</refTransId>
-        </transactionRequest>
-    </createTransactionRequest>
-    """
-    response = requests.post(url, data=xml_payload, headers=headers)
-    return response.json()
-
 # Example usage
 call_details = {
     "start_time": "2025-01-16T10:00:00Z",
     "duration": "300",
     "description": "Customer inquiry about pricing.",
 }
+
 contact_id = "1234567890"  # Replace with actual Zoho contact ID
 transaction_id = "TRANSACTION_ID"  # Replace with actual transaction ID from Authorize.net
 
-
-response_call = log_call_in_zoho(contact_id, call_details)
-print("Call Response:", response_call)
-
-
-response_payment = get_payment_details(transaction_id)
-print("Payment Response:", response_payment)
+# Step 1: Retrieve payment details from Authorize.net
+transaction_info = get_transaction_details(transaction_id)
+if transaction_info:
+    print("Transaction Details:", transaction_info)
+    # Step 2: Log the call in Zoho CRM
+    response_call = log_call_in_zoho(contact_id, call_details)
+    print("Call Response:", response_call)
+else:
+    print("Failed to retrieve transaction details.")
